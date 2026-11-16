@@ -10,10 +10,10 @@ namespace DVLD.GlobalClasses
 {
     public static class clsGlobal
     {
-        private const string subKeyPath = @"SOFTWARE\DVLD";
-        private const string keyPath = @"HKEY_CURRENT_USER\" + subKeyPath;
-        private static readonly string valueUsername = "Username";
-        private static readonly string valuePassword = "Password";
+        private const string _subKeyPath = @"SOFTWARE\DVLD";
+        private const string _keyPath = @"HKEY_CURRENT_USER\" + _subKeyPath;
+        private static readonly string _valueUsername = "Username";
+        private static readonly string _valuePassword = "Password";
 
         public static clsUser CurrentUser { get; set; } = null;
 
@@ -27,15 +27,15 @@ namespace DVLD.GlobalClasses
 
             try
             {
-                Registry.SetValue(keyPath, valueUsername, username.Trim(), RegistryValueKind.String);
-                Registry.SetValue(keyPath, valuePassword, password.Trim(), RegistryValueKind.String);
+                Registry.SetValue(_keyPath, _valueUsername, username.Trim(), RegistryValueKind.String);
+                Registry.SetValue(_keyPath, _valuePassword, password.Trim(), RegistryValueKind.String);
                 return true;
             }
             catch (Exception ex)
             {
                 clsEventLogger.LogEvent(
                     ex,
-                    $"RegistryPath: {keyPath}, Username: {username?.Trim()}"
+                    $"RegistryPath: {_keyPath}, Username: {username?.Trim()}"
                 );
                 return false;
             }
@@ -45,12 +45,12 @@ namespace DVLD.GlobalClasses
         {
             try
             {
-                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(subKeyPath))
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(_subKeyPath))
                 {
                     if (key != null)
                     {
-                        string storedUser = key.GetValue(valueUsername, null) as string;
-                        string storedPass = key.GetValue(valuePassword, null) as string;
+                        string storedUser = key.GetValue(_valueUsername, null) as string;
+                        string storedPass = key.GetValue(_valuePassword, null) as string;
 
                         if (!string.IsNullOrEmpty(storedUser) && !string.IsNullOrEmpty(storedPass))
                         {
@@ -63,7 +63,7 @@ namespace DVLD.GlobalClasses
             }
             catch (Exception ex)
             {
-                clsEventLogger.LogEvent(ex, $"SubKeyPath: {subKeyPath}");
+                clsEventLogger.LogEvent(ex, $"SubKeyPath: {_subKeyPath}");
             }
 
             return false;
@@ -76,35 +76,75 @@ namespace DVLD.GlobalClasses
             return GetStoredCredential(ref username, ref password);
         }
 
+        public static bool UpdateRememberedUsername(string username)
+        {
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                _ClearStoredCredentials();
+                return false;
+            }
+
+            try
+            {
+                Registry.SetValue(_keyPath, _valueUsername, username.Trim(), RegistryValueKind.String);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                clsEventLogger.LogEvent(
+                    ex,
+                    $"RegistryPath: {_keyPath}, Username: {username?.Trim()}"
+                );
+
+                return false;
+            }
+        }
+
         private static void _ClearStoredCredentials()
         {
             try
             {
-                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(subKeyPath, true))
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(_subKeyPath, true))
                 {
                     if (key != null)
                     {
-                        key.DeleteValue(valueUsername, false);
-                        key.DeleteValue(valuePassword, false);
+                        key.DeleteValue(_valueUsername, false);
+                        key.DeleteValue(_valuePassword, false);
                     }
                 }
             }
             catch (Exception ex)
             {
-                clsEventLogger.LogEvent(ex, $"SubKeyPath: {subKeyPath}");
+                clsEventLogger.LogEvent(ex, $"SubKeyPath: {_subKeyPath}");
             }
         }
 
-        public static void SyncIfCurrentUser(int updatedUserId)
+        public static void SyncCurrentUser(int updatedUserId, string newPlainPassword = null)
         {
-            if (CurrentUser != null && CurrentUser.UserId == updatedUserId)
-            {
-                CurrentUser = clsUser.Find(updatedUserId);
+            if (CurrentUser == null || CurrentUser.UserId != updatedUserId)
+                return;
 
-                if (CurrentUser != null && HasSavedCredentials())
-                {
-                    RememberUsernameAndPassword(CurrentUser.UserName, CurrentUser.Password);
-                }
+            CurrentUser = clsUser.Find(updatedUserId);
+
+            if (CurrentUser == null)
+                return;
+
+            if (!HasSavedCredentials())
+                return;
+
+            if (!CurrentUser.IsActive)
+            {
+                _ClearStoredCredentials();
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(newPlainPassword))
+            {
+                RememberUsernameAndPassword(CurrentUser.UserName, newPlainPassword);
+            }
+            else
+            {
+                UpdateRememberedUsername(CurrentUser.UserName);
             }
         }
 

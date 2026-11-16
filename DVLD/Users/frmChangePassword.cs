@@ -6,6 +6,8 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Windows.Forms;
+using DVLD_Shared;
+using DVLD_Shared.Utility;
 
 namespace DVLD.Users
 {
@@ -52,7 +54,7 @@ namespace DVLD.Users
                 return false;
             }
 
-            if(!currentPassword.Equals(_user.Password))
+            if(!_user.VerifyPassword(currentPassword))
             {
                 errorProvider1.SetError(txtCurrentPassword, "Current Password is incorrect!");
                 return false;
@@ -72,9 +74,9 @@ namespace DVLD.Users
                 return false;
             }
 
-            if (newPassword.Equals(_user.Password))
+            if(_user.VerifyPassword(newPassword))
             {
-                errorProvider1.SetError(txtNewPassword, "New password cannot be the same as the current password. Please choose a different password.");
+                errorProvider1.SetError(txtNewPassword, "New Password cannot be the same as the current password. Please choose a different password.");
                 return false;
             }
 
@@ -134,16 +136,32 @@ namespace DVLD.Users
             _SetTagsToControls();
         }
 
-        private void _SetDataToSave()
-        {
-            _user.Password = txtNewPassword.Text.Trim();
-        }
-
         private bool _PerformSave()
         {
-            _SetDataToSave();
+            bool isChanged = false;
 
-            if (_user.Save())
+            try
+            {
+                isChanged = _user.ChangePassword(
+                    txtCurrentPassword.Text.Trim(), 
+                    txtNewPassword.Text.Trim()
+                );
+            }
+            catch (Exception ex)
+            {
+                clsEventLogger.LogEvent(ex, $"Form: frmChangePassword | UserID: {_user?.UserId}");
+
+                MessageBox.Show(
+                    "An unexpected error occurred while changing the password. Please check the Event Log.",
+                    "System Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+
+                return false;
+            }
+
+            if (isChanged)
             {
                 MessageBox.Show(
                     "Password Changed Successfully",
@@ -151,25 +169,22 @@ namespace DVLD.Users
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information
                 );
-
-                return true;
             }
             else
             {
                 MessageBox.Show(
-                    "Error, can't save data",
+                    "Current password is incorrect or failed to save data.",
                     "Invalid",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error
                 );
             }
 
-            return false;
+            return isChanged;
         }
 
         private void btnSave_Click(object sender, EventArgs e)
         {
-
             if (!this.ValidateChildren())
             {
                 MessageBox.Show(
@@ -181,11 +196,12 @@ namespace DVLD.Users
                 return;
             }
 
+            string newPlainPassword = txtNewPassword.Text.Trim();
             bool isSave = _PerformSave();
             
             if (isSave)
             {
-                clsGlobal.SyncIfCurrentUser(_user.UserId);
+                clsGlobal.SyncCurrentUser(_user.UserId, newPlainPassword);
                 UserUpdated(_user.UserId);
                 _SetDefaultValues();
             }

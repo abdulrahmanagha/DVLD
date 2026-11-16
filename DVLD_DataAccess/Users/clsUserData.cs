@@ -104,18 +104,17 @@ namespace DVLD_DataAccess.Users
             return isFound;
         }
 
-        public static bool GetUserInfoByUserNameAndPassword(UserDTO userDTO)
+        public static bool GetUserInfoByUserName(UserDTO userDTO)
         {
             bool isFound = false;
-            string query = @"                    
+            string query = @"
                 SELECT UserID
                      , UserName
                      , Password
                      , IsActive
                      , PersonID
                 FROM Users
-                WHERE UserName = @UserName 
-                  AND Password = @Password;
+                WHERE UserName = @UserName;
             ";
 
             try
@@ -124,7 +123,6 @@ namespace DVLD_DataAccess.Users
                 using (SqlCommand cmd = new SqlCommand(query, connection))
                 {
                     cmd.Parameters.Add("@UserName", SqlDbType.NVarChar, 20).Value = userDTO.UserName;
-                    cmd.Parameters.Add("@Password", SqlDbType.NVarChar, 255).Value = userDTO.Password;
 
                     connection.Open();
                     using (SqlDataReader reader = cmd.ExecuteReader())
@@ -137,10 +135,6 @@ namespace DVLD_DataAccess.Users
                             userDTO.IsActive = (bool)reader["IsActive"];
                             userDTO.PersonID = reader["PersonID"] as int?;
                             isFound = true;
-                        }
-                        else
-                        {
-                            isFound = false;
                         }
                     }
                 }
@@ -322,6 +316,38 @@ namespace DVLD_DataAccess.Users
                 using (SqlCommand cmd = new SqlCommand(query, connection))
                 {
                     cmd.Parameters.Add("@UserName", SqlDbType.NVarChar, 20).Value = userName;
+
+                    connection.Open();
+                    object result = cmd.ExecuteScalar();
+                    isFound = (result != null);
+                }
+            }
+            catch (Exception ex)
+            {
+                clsEventLogger.LogEvent(ex, $"UserName: {userName}");
+                isFound = false;
+            }
+
+            return isFound;
+        }
+
+        public static bool IsUserExist(string userName, int? excludeUserId)
+        {
+            bool isFound = false;
+            string query = @"
+                SELECT 1
+                FROM Users
+                WHERE UserName = @UserName
+                AND UserID != @ExcludeUserID;
+            ";
+
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(clsSettings.ConnectionString))
+                using (SqlCommand cmd = new SqlCommand(query, connection))
+                {
+                    cmd.Parameters.Add("@UserName", SqlDbType.NVarChar, 20).Value = userName;
+                    cmd.Parameters.Add("@ExcludeUserID", SqlDbType.Int).Value = excludeUserId;
 
                     connection.Open();
                     object result = cmd.ExecuteScalar();

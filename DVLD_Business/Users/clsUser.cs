@@ -1,7 +1,9 @@
 ﻿using DVLD_DataAccess.Users;
 using DVLD_Shared;
+using DVLD_Shared.Utility;
 using System;
 using System.Data;
+using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace DVLD_Business.Users
 {
@@ -13,14 +15,18 @@ namespace DVLD_Business.Users
         public int? PersonId { get; set; } = null;
         public int UserId { get; set;}
         public string UserName { get; set; } = null;
-        public string Password { get; set; } = null;
         public bool IsActive { get; set; } = false;
 
         private enMode _mode = enMode.Update;
+        private string _passwordHash = null;
 
-        public clsUser() 
+        public clsUser(string plainPassword) 
         {
+            if(string.IsNullOrWhiteSpace(plainPassword))
+                throw new ArgumentException("Password cannot be null or empty.", nameof(plainPassword));
+
             UserId = -1;
+            _passwordHash = clsPasswordHasher.HashPassword(plainPassword);
             _mode = enMode.AddNew;
         }
 
@@ -28,11 +34,11 @@ namespace DVLD_Business.Users
         {
             UserId = userDTO.UserID;
             UserName = userDTO.UserName;
-            Password = userDTO.Password;
             IsActive = userDTO.IsActive;
             PersonId = userDTO.PersonID;
+            _passwordHash = userDTO.Password;
 
-            if(person != null)
+            if (person != null)
             {
                 PersonInfo = person;
             }
@@ -84,39 +90,57 @@ namespace DVLD_Business.Users
                 return null;
         }
 
-        public static clsUser Find(string username, string password)
+        public static clsUser Find(string username, string plainPassword)
         {
-            UserDTO userDTO = new UserDTO
-            {
-                UserName = username,
-                Password = password
+            UserDTO userDTO = new UserDTO 
+            { 
+                UserName = username 
             };
 
-            bool isFoud = clsUserData.GetUserInfoByUserNameAndPassword(userDTO);
-
-            if (isFoud)
-            {
-                clsPerson person = null;
-
-                if (userDTO.PersonID.HasValue)
-                {
-                    person = clsPerson.Find(userDTO.PersonID.Value);
-                }
-
-                return new clsUser(userDTO, person);
-            }
-            else
-            {
+            if (!clsUserData.GetUserInfoByUserName(userDTO))
                 return null;
-            }
+
+            if (!clsPasswordHasher.VerifyPassword(plainPassword, userDTO.Password))
+                return null;
+
+            clsPerson person = userDTO.PersonID.HasValue ? clsPerson.Find(userDTO.PersonID.Value) : null;
+            return new clsUser(userDTO, person);
         }
     
+        public bool VerifyPassword(string plainPassword)
+        {
+            return clsPasswordHasher.VerifyPassword(plainPassword, _passwordHash);
+        }
+
+        public bool ChangePassword(string currentPlainPassword, string newPlainPassword)
+        {
+            if(_mode != enMode.Update)
+                throw new InvalidOperationException("Cannot change password for an unsaved user.");
+
+            if(string.IsNullOrWhiteSpace(newPlainPassword))
+                throw new ArgumentException("New password cannot be null or empty.", nameof(newPlainPassword));
+
+            if (!VerifyPassword(currentPlainPassword))
+                return false;
+
+            string newHash = clsPasswordHasher.HashPassword(newPlainPassword);
+
+            if(clsUserData.ChangePassword(this.UserId, newHash))
+            {
+                _passwordHash = newHash;
+                return true;
+            }
+
+
+            return false;
+        }
+
         private bool _AddNewUser()
         {
             UserDTO userDTO = new UserDTO
             {
                 UserName = this.UserName,
-                Password = this.Password,
+                Password = _passwordHash,
                 IsActive = this.IsActive,
                 PersonID = this.PersonId
             };
@@ -131,7 +155,7 @@ namespace DVLD_Business.Users
             {
                 UserID = this.UserId,
                 UserName = this.UserName,
-                Password = this.Password,
+                Password = _passwordHash,
                 IsActive = this.IsActive,
                 PersonID = this.PersonId
             };
@@ -183,6 +207,11 @@ namespace DVLD_Business.Users
         public static bool IsUserExist(string userName)
         {
             return clsUserData.IsUserExist(userName);
+        }
+
+        public static bool IsUserExist(string userName, int excludeUserId)
+        {
+            return clsUserData.IsUserExist(userName, excludeUserId);
         }
 
         public static bool IsUserExistForPersonId(int personId)
