@@ -88,11 +88,12 @@ namespace DVLD.Users
             {
                 chkIsActive.Enabled = false;
             }
+
+            _HidePasswordFields();
         }
 
         private void _PrepareAddNewMode()
         {
-            _user = new clsUser();
             lblTitleForm.Text = ADD_NEW_TITLE;
             _userId = null;
 
@@ -139,17 +140,36 @@ namespace DVLD.Users
             );
 
             _ConvertModeToUpdate();
+            _HidePasswordFields();
         }
 
         private void _SetDataToSave()
         {
+            if (_mode == enMode.AddNew)
+            {
+                _user = new clsUser(txtPassword.Text.Trim());
+                _linkPersonToUser();
+            }
+
             _user.UserName = txtUserName.Text.Trim();
             _user.IsActive = chkIsActive.Checked;
+        }
 
-            if(!string.IsNullOrEmpty(txtPassword.Text))
-            {
-                _user.Password = txtPassword.Text.Trim();
-            }
+        private void _HidePasswordFields()
+        {
+            txtPassword.Clear();
+            txtConfirmPassword.Clear();
+
+            txtPassword.Visible = false;
+            txtConfirmPassword.Visible = false;
+            pbDisplayPassword.Visible = false;
+            pbDisplayConfirmPassword.Visible = false;
+            lblDisplayPassword.Visible = false;
+            lblDisplayConfirmPassword.Visible = false;
+            pbPassword.Visible = false;
+            pbConfirmPassword.Visible = false;
+
+            chkIsActive.Location = new Point(chkIsActive.Location.X, chkIsActive.Location.Y - 110);
         }
 
         private bool _PerformSave()
@@ -167,8 +187,6 @@ namespace DVLD.Users
                     _PerformAddNew();
                 }
 
-                txtPassword.Clear();
-                txtConfirmPassword.Clear();
                 return true;
             }
             else
@@ -250,7 +268,7 @@ namespace DVLD.Users
 
             if (isSave)
             {
-                clsGlobal.SyncIfCurrentUser(_user.UserId);
+                clsGlobal.SyncCurrentUser(_user.UserId);
                 UserSaved(_user.UserId);
             }
         }
@@ -272,6 +290,12 @@ namespace DVLD.Users
         private void tabCtrl_SelectedIndexChanged(object sender, EventArgs e)
         {
             btnSave.Enabled = (tabCtrl.SelectedIndex == 1);
+        }
+
+        private void _linkPersonToUser()
+        {
+            _user.PersonId = ctrlPersonCardWithFilter1.PersonId;
+            _user.PersonInfo = ctrlPersonCardWithFilter1.SelectedPersonInfo;
         }
 
         private void tabCtrl_Selecting(object sender, TabControlCancelEventArgs e)
@@ -309,9 +333,6 @@ namespace DVLD.Users
                 e.Cancel = true;
                 return;
             }
-
-            _user.PersonId = ctrlPersonCardWithFilter1.PersonId;
-            _user.PersonInfo = ctrlPersonCardWithFilter1.SelectedPersonInfo;
         }
 
         private void btnNext_Click(object sender, EventArgs e)
@@ -324,6 +345,18 @@ namespace DVLD.Users
             tabCtrl.SelectedTab = tpPersonallnfo;
         }
 
+        private bool _CheckIfUserNameExists(string userName)
+        {
+            if (_mode == enMode.AddNew)
+            {
+                return clsUser.IsUserExist(userName);
+            }
+            else
+            {
+                return clsUser.IsUserExist(userName, _user.UserId);
+            }
+        }
+
         private bool _ValidateUserName()
         {
             string userName = txtUserName.Text;
@@ -333,12 +366,7 @@ namespace DVLD.Users
                 return false;
             }
 
-            if (
-                (
-                    _user.UserName == null || 
-                    !_user.UserName.Equals(userName.Trim(), StringComparison.OrdinalIgnoreCase)
-                ) && clsUser.IsUserExist(userName.Trim())
-            )
+            if (_CheckIfUserNameExists(userName))
             {
                 errorProvider1.SetError(txtUserName, "Username not available");
                 return false;
