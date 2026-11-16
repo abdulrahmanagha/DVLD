@@ -70,6 +70,7 @@
     <Compile Include="DTOs\TestDTO.cs" />
     <Compile Include="DTOs\UserDTO.cs" />
     <Compile Include="Utility\clsEventLogger.cs" />
+    <Compile Include="Utility\clsPasswordHasher.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
